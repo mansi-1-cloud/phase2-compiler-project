@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Analyzer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .section {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        label {
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        textarea {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            resize: vertical;
+            min-height: 400px;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 5px rgba(102, 126, 234, 0.3);
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        select {
+            padding: 10px 15px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            background: white;
+        }
+        
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+        
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .results-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .panel {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .panel h3 {
+            color: #333;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .panel h4 {
+            color: #555;
+            margin-top: 15px;
+            margin-bottom: 10px;
+        }
+        
+        .status-message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 5px;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 1000;
+        }
+        
+        .status-message.show {
+            opacity: 1;
+        }
+        
+        .status-message.success {
+            background: #4caf50;
+            color: white;
+        }
+        
+        .status-message.error {
+            background: #f44336;
+            color: white;
+        }
+        
+        .status-message.info {
+            background: #2196f3;
+            color: white;
+        }
+        
+        .loading-spinner {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2000;
+            text-align: center;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-spinner p {
+            margin-top: 15px;
+            color: #333;
+            font-weight: bold;
+        }
+        
+        ul {
+            margin-left: 20px;
+            line-height: 1.8;
+        }
+        
+        ul li {
+            margin: 5px 0;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Code Analyzer</h1>
+        <p class="subtitle">Analyze C, C++ and Java code for issues and optimizations</p>
+        
+        <!-- Controls -->
+        <div class="controls">
+            <select id="language-select">
+                <option value="java">☕ Java</option>
+                <option value="cpp">⚙️ C++</option>
+                <option value="c">📱 C</option>
+            </select>
+            <button class="btn-primary" id="analyze-btn">⚡ Analyze Code</button>
+            <button class="btn-secondary" id="clear-btn">🗑️ Clear</button>
+        </div>
+        
+        <!-- Code Input -->
+        <div class="main-grid">
+            <div class="section">
+                <label>📝 Your Code:</label>
+                <textarea id="code-input" placeholder="Paste your code here..."></textarea>
+            </div>
+            
+            <!-- Empty space for now -->
+            <div class="section">
+                <label>📊 Analysis Results:</label>
+                <div style="flex: 1; padding: 12px; background: #f0f0f0; border-radius: 5px; color: #999;">
+                    Results will appear here...
+                </div>
+            </div>
+        </div>
+        
+        <!-- Results -->
+        <div class="results-grid">
+            <div class="panel" id="issues-panel">
+                <h3>Issues</h3>
+                <p style="color: #999;">Click Analyze to see issues...</p>
+            </div>
+            
+            <div class="panel" id="statistics-panel">
+                <h3>Statistics</h3>
+                <p style="color: #999;">Click Analyze to see statistics...</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Status Message -->
+    <div id="status-message" class="status-message"></div>
+    
+    <!-- Loading Spinner -->
+    <div id="loading-spinner" class="loading-spinner">
+        <div class="spinner"></div>
+        <p>Analyzing code...</p>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
