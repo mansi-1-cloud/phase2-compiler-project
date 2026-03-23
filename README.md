@@ -46,7 +46,7 @@ phase3/
    py app.py
    ```
 
-3. Open `http://127.0.0.1:5000` in your browser. The app serves both the frontend and API.
+3. Open `http://127.0.0.1:5001` in your browser. The app now serves both the frontend and API.
 
 ## Usage
 

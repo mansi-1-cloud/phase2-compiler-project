@@ -134,7 +134,7 @@
         
         .results-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 20px;
         }
         
@@ -256,22 +256,17 @@
             <!-- Empty space for now -->
             <div class="section">
                 <label>📊 Analysis Results:</label>
-                <div style="flex: 1; padding: 12px; background: #f0f0f0; border-radius: 5px; color: #999;">
-                    Results will appear here...
+                <div id="analysis-results-panel" style="flex: 1; padding: 12px; background: #f0f0f0; border-radius: 5px; color: #999; min-height: 400px; overflow-y: auto;">
+                    Analysis results will appear here...
                 </div>
             </div>
         </div>
         
         <!-- Results -->
         <div class="results-grid">
-            <div class="panel" id="issues-panel">
-                <h3>Issues</h3>
-                <p style="color: #999;">Click Analyze to see issues...</p>
-            </div>
-            
             <div class="panel" id="statistics-panel">
-                <h3>Statistics</h3>
-                <p style="color: #999;">Click Analyze to see statistics...</p>
+                <h3>Optimization Techniques To Apply</h3>
+                <p style="color: #999;">Click Analyze to see required optimization techniques...</p>
             </div>
         </div>
     </div>

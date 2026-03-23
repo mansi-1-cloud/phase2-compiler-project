@@ -1,12 +1,22 @@
 """Flask API"""
-from flask import Flask, request, jsonify
+from pathlib import Path
+
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from analyzer import analyze_code
 from optimizations import optimize
 from language_detector import detect_language
 
-app = Flask(__name__)
+BASE_DIR = Path(__file__).resolve().parents[2]
+FRONTEND_DIR = BASE_DIR / 'frontend'
+
+app = Flask(__name__, static_folder=str(FRONTEND_DIR), static_url_path='')
 CORS(app)
+
+
+@app.route('/', methods=['GET'])
+def index():
+    return send_from_directory(FRONTEND_DIR, 'index.html')
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -48,6 +58,8 @@ def analyze():
         orig_lines = len([l for l in code.split('\n') if l.strip()])
         opt_lines = len([l for l in optimized.split('\n') if l.strip()])
         
+        # Use defensive stat access because optimization modules may expose
+        # different metric keys over time.
         response = {
             'success': True,
             'issues': issues,
@@ -55,12 +67,15 @@ def analyze():
                 'original_lines': orig_lines,
                 'optimized_lines': opt_lines,
                 'lines_saved': orig_lines - opt_lines,
-                'constant_folding': stats['constant_folding'],
-                'dead_code': stats['dead_code'],
-                'redundant_assignment': stats['redundant_assignment'],
-                'expression_simplify': stats['expression_simplify'],
-                'unused_variables': stats['unused_variables'],
-                'total_optimizations': sum(stats.values())
+                'constant_folding': stats.get('constant_folding', 0),
+                'dead_code': stats.get('dead_code', 0),
+                'redundant_assignment': stats.get('redundant_assignment', 0),
+                'expression_simplify': stats.get('expression_simplify', 0),
+                'unused_variables': stats.get('unused_variables', 0),
+                'loop_invariant': stats.get('loop_invariant', 0),
+                'unnecessary_variables': stats.get('unnecessary_variables', 0),
+                'inefficient_loops': stats.get('inefficient_loops', 0),
+                'total_optimizations': sum(v for v in stats.values() if isinstance(v, (int, float)))
             }
         }
         
