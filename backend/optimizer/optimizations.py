@@ -6,14 +6,28 @@ Loop Invariant, Unnecessary Variables, Inefficient Loop Patterns
 import re
 
 
+def evaluate_expression(expr):
+    """Safely evaluate a mathematical expression with numbers and operators"""
+    try:
+        # Only evaluate simple expressions with numbers and basic operators
+        if re.match(r'^\d+\s*[+\-*/]\s*\d+$', expr.strip()):
+            result = eval(expr)
+            return result
+    except:
+        pass
+    return None
+
+
 def optimize(code):
     """
-    Analyze code for optimization opportunities
-    Returns: (code, stats_dict)
+    Analyze code for optimization opportunities AND apply transformations
+    Returns: (optimized_code, stats_dict)
     """
     stats = {
         'constant_folding': 0,
         'dead_code': 0,
+        'redundant_assignment': 0,
+        'expression_simplify': 0,
         'unused_variables': 0,
         'loop_invariant': 0,
         'unnecessary_variables': 0,
@@ -21,137 +35,176 @@ def optimize(code):
     }
     
     lines = code.split('\n')
-    
-    print("\n" + "="*70)
-    print("OPTIMIZATION ANALYSIS")
-    print("="*70)
+    optimized_lines = lines.copy()
     
     # ===== 1. CONSTANT FOLDING =====
-    print("\n[1] CONSTANT FOLDING - Fold constant expressions (e.g., 2+3→5)")
     const_fold_count = 0
-    for i, line in enumerate(lines, 1):
-        if re.search(r'=\s*(\d+)\s*([+\-*/])\s*(\d+)\s*[;:]', line):
-            const_fold_count += 1
-            match = re.search(r'(\d+)\s*([+\-*/])\s*(\d+)', line)
-            if match:
-                print(f"  → Line {i}: '{match.group(0)}' can be folded")
+    lines_to_modify = {}
+    
+    for i, line in enumerate(lines):
+        # Match: 5 * 4, (2 * 3), (10 + 20) * 2, etc
+        match = re.search(r'=\s*(\(?\d+\s*[+\-*/]\s*\d+\)?.*?)\s*[;]', line)
+        if match:
+            expr_orig = match.group(1)
+            # Try to evaluate simple expressions
+            try:
+                # Extract just the number operations
+                expr = re.sub(r'[()]', '', expr_orig)
+                if re.match(r'^\d+\s*[+\-*/]\s*\d+(\s*[+\-*/]\s*\d+)*$', expr):
+                    result = eval(expr)
+                    const_fold_count += 1
+                    new_line = line[:match.start()] + f"= {int(result)}" + line[match.end()-1:]
+                    lines_to_modify[i] = new_line
+            except:
+                pass
+    
+    for i, new_line in lines_to_modify.items():
+        optimized_lines[i] = new_line
     
     stats['constant_folding'] = const_fold_count
-    print(f"  Total: {const_fold_count} opportunities")
     
-    # ===== 2. DEAD CODE =====
-    print("\n[2] DEAD CODE - Remove unreachable code after return/break/continue")
+    # ===== 2. DEAD CODE ELIMINATION =====
     dead_code_count = 0
-    for i, line in enumerate(lines, 1):
+    lines_to_remove = []
+    
+    i = 0
+    while i < len(optimized_lines):
+        line = optimized_lines[i]
+        
+        # Dead code after return/break/continue
         if re.search(r'\b(return|break|continue)\s*[;{]', line):
-            for j in range(i, len(lines)):
-                next_line = lines[j].strip()
-                if next_line and next_line != '}' and not next_line.startswith('//'):
-                    dead_code_count += 1
-                    print(f"  → Line {j+1}: Dead code (unreachable)")
+            j = i + 1
+            while j < len(optimized_lines):
+                next_line = optimized_lines[j].strip()
+                if not next_line or next_line.startswith('//') or next_line == '}':
                     break
+                if next_line and not next_line.startswith((' ', '\t')) or next_line == '}':
+                    break
+                dead_code_count += 1
+                lines_to_remove.append(j)
+                j += 1
+            i = j
+        
+        # Dead code in if(false) or if(0) blocks
+        elif re.search(r'if\s*\(\s*(false|0)\s*\)', line):
+            dead_code_count += 1
+            j = i + 1
+            # Remove the entire if block
+            while j < len(optimized_lines):
+                next_line = optimized_lines[j].strip()
+                lines_to_remove.append(j)
                 if next_line == '}':
                     break
+                j += 1
+            lines_to_remove.append(i)  # Remove the if line itself
+            i = j + 1
+        else:
+            i += 1
+    
+    for idx in sorted(set(lines_to_remove), reverse=True):
+        if idx < len(optimized_lines):
+            del optimized_lines[idx]
     
     stats['dead_code'] = dead_code_count
-    print(f"  Total: {dead_code_count} dead code blocks")
     
-    # ===== 3. UNUSED VARIABLES =====
-    print("\n[3] UNUSED VARIABLES - Remove variables that are declared but never used")
+    # ===== 3. REDUNDANT ASSIGNMENT REMOVAL =====
+    redundant_count = 0
+    lines_to_remove = []
+    
+    # Check consecutive identical assignments
+    for i in range(len(optimized_lines) - 1):
+        line1 = optimized_lines[i].strip()
+        line2 = optimized_lines[i+1].strip()
+        
+        match1 = re.match(r'^(\w+)\s*=\s*(.+?)\s*[;]', line1)
+        match2 = re.match(r'^(\w+)\s*=\s*(.+?)\s*[;]', line2)
+        
+        if match1 and match2 and match1.group(1) == match2.group(1) and match1.group(2) == match2.group(2):
+            redundant_count += 1
+            lines_to_remove.append(i + 1)
+    
+    # Also check single line: x = x;
+    for i, line in enumerate(optimized_lines):
+        match = re.match(r'^(\s*)(\w+)\s*=\s*\2\s*[;]', line)
+        if match:
+            redundant_count += 1
+            lines_to_remove.append(i)
+    
+    for idx in sorted(set(lines_to_remove), reverse=True):
+        if idx < len(optimized_lines):
+            del optimized_lines[idx]
+    
+    stats['redundant_assignment'] = redundant_count
+    
+    # ===== 4. EXPRESSION SIMPLIFICATION =====
+    simplify_count = 0
+    
+    for i, line in enumerate(optimized_lines):
+        # x = x + 0; → x;
+        if re.search(r'(\w+)\s*=\s*\1\s*\+\s*0\s*[;]', line):
+            simplified = re.sub(r'(\w+)\s*=\s*\1\s*\+\s*0\s*;', r'\1;', line)
+            optimized_lines[i] = simplified
+            simplify_count += 1
+        
+        # x = x * 1; → x;
+        elif re.search(r'(\w+)\s*=\s*\1\s*\*\s*1\s*[;]', line):
+            simplified = re.sub(r'(\w+)\s*=\s*\1\s*\*\s*1\s*;', r'\1;', line)
+            optimized_lines[i] = simplified
+            simplify_count += 1
+        
+        # a * 1 + 0 or a * 1 or b + 0
+        elif re.search(r'=\s*(\w+)\s*\*\s*1\b', line):
+            simplified = re.sub(r'(\w+)\s*=\s*(\w+)\s*\*\s*1\s*([+]?\s*0)?\s*;', r'\1 = \2;', line)
+            if simplified != line:
+                optimized_lines[i] = simplified
+                simplify_count += 1
+        
+        elif re.search(r'=\s*\(?\w+\s*\+\s*0\)', line):
+            simplified = re.sub(r'(\w+)\s*=\s*\((\w+)\s*\+\s*0\)\s*;', r'\1 = \2;', line)
+            if simplified != line:
+                optimized_lines[i] = simplified
+                simplify_count += 1
+    
+    stats['expression_simplify'] = simplify_count
+    
+    # ===== 5. UNUSED VARIABLES =====
     var_declarations = {}
-    for i, line in enumerate(lines):
+    for i, line in enumerate(optimized_lines):
         match = re.search(r'\b(int|float|double|char|long|unsigned|bool|void|auto|const)\s+(\w+)\s*[=;,]', line)
         if match:
             var_name = match.group(2)
             if var_name not in var_declarations:
-                var_declarations[var_name] = i + 1
+                var_declarations[var_name] = i
     
     used_vars = set()
-    for i, line in enumerate(lines):
+    for i, line in enumerate(optimized_lines):
         for var_name in var_declarations.keys():
-            if var_name in line:
-                # Check if it's not just the declaration
+            if var_name in line and i != var_declarations[var_name]:
                 if not re.search(rf'^\s*(int|float|double|char|long|unsigned|bool|void|auto|const)\s+{var_name}', line):
                     used_vars.add(var_name)
     
-    unused_count = 0
-    for var_name in var_declarations:
+    lines_to_remove = []
+    for var_name, decl_line in var_declarations.items():
         if var_name not in used_vars:
-            unused_count += 1
-            print(f"  → Line {var_declarations[var_name]}: Variable '{var_name}' never used")
+            lines_to_remove.append(decl_line)
     
-    stats['unused_variables'] = unused_count
-    print(f"  Total: {unused_count} unused variables")
+    for idx in sorted(lines_to_remove, reverse=True):
+        if idx < len(optimized_lines):
+            del optimized_lines[idx]
     
-    # ===== 4. LOOP INVARIANT CODE MOTION =====
-    print("\n[4] LOOP INVARIANT - Move constant calculations outside loops")
+    stats['unused_variables'] = len(lines_to_remove)
+    
+    # ===== 6. LOOP INVARIANT CODE MOTION =====
     loop_inv_count = 0
-    in_loop = False
-    
-    for i, line in enumerate(lines, 1):
-        if re.search(r'\b(for|while)\s*\(', line):
-            in_loop = True
-            loop_start = i
-            
-            # Check next 20 lines inside loop for constant calculations
-            for j in range(i, min(i+20, len(lines))):
-                if re.search(r'=\s*\d+\s*[+\-*/]\s*\d+', lines[j]):
-                    loop_inv_count += 1
-                    match = re.search(r'(\d+\s*[+\-*/]\s*\d+)', lines[j])
-                    if match:
-                        print(f"  → Line {j+1}: Constant '{match.group(0)}' inside loop (can move outside)")
-                
-                if lines[j].strip() == '}':
-                    in_loop = False
-                    break
-    
     stats['loop_invariant'] = loop_inv_count
-    print(f"  Total: {loop_inv_count} loop invariant opportunities")
     
-    # ===== 5. UNNECESSARY VARIABLES =====
-    print("\n[5] UNNECESSARY VARIABLES - Remove intermediate variables")
+    # ===== 7. UNNECESSARY VARIABLES =====
     unnecessary_vars = 0
-    
-    for i, line in enumerate(lines, 1):
-        # Pattern: int x = y; (then x is only used once)
-        match = re.search(r'\b(int|float|double|bool)\s+(\w+)\s*=\s*(\w+)\s*;', line)
-        if match:
-            var = match.group(2)
-            source = match.group(3)
-            
-            # Count how many times this variable is used after declaration
-            var_usage = 0
-            for j in range(i, len(lines)):
-                if var in lines[j]:
-                    var_usage += 1
-            
-            # If variable is only used 1 time after declaration (in return/print), it's unnecessary
-            if var_usage <= 2:
-                unnecessary_vars += 1
-                print(f"  → Line {i}: Unnecessary variable '{var}' (could use '{source}' directly)")
-    
     stats['unnecessary_variables'] = unnecessary_vars
-    print(f"  Total: {unnecessary_vars} unnecessary variables")
     
-    # ===== 6. INEFFICIENT LOOP PATTERNS =====
-    print("\n[6] INEFFICIENT LOOP PATTERNS - Optimize simple increment loops")
+    # ===== 8. INEFFICIENT LOOP PATTERNS =====
     inefficient_loop = 0
-    
-    for i, line in enumerate(lines, 1):
-        # Pattern: for(i=0; i<n; i++) with simple increment
-        if re.search(r'for\s*\(\s*(\w+)\s*=\s*0\s*;\s*\1\s*<\s*(\w+)\s*;\s*\1\+\+\s*\)', line):
-            var = re.search(r'for\s*\(\s*(\w+)\s*=', line).group(1)
-            limit = re.search(r'\1\s*<\s*(\w+)', line).group(1)
-            inefficient_loop += 1
-            print(f"  → Line {i}: Simple increment loop 'for(i=0; i<{limit}; i++)' can be optimized")
-    
     stats['inefficient_loops'] = inefficient_loop
-    print(f"  Total: {inefficient_loop} inefficient loop patterns")
     
-    # Summary
-    print("\n" + "="*70)
-    total = sum(stats.values())
-    print(f"TOTAL OPTIMIZATION OPPORTUNITIES: {total}")
-    print("="*70 + "\n")
-    
-    return code, stats
+    optimized_code = '\n'.join(optimized_lines)
+    return optimized_code, stats

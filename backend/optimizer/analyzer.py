@@ -8,49 +8,29 @@ def analyze_code(code):
     issues = []
     lines = code.split('\n')
     
-    print("\n" + "="*60)
-    print("ANALYZING CODE")
-    print("="*60)
-    
     # ===== FIND UNUSED VARIABLES =====
     declared_vars = {}
     
     for i, line in enumerate(lines):
-        # Match: int x = 10;  or  float y = 3.14;
         match = re.search(r'\b(int|float|double|char|long|unsigned|bool)\s+(\w+)\s*=', line)
         if match:
             var_name = match.group(2)
             declared_vars[var_name] = i + 1
-            print(f"Found variable: {var_name} at line {i+1}")
     
-    print(f"Total variables declared: {len(declared_vars)}")
-    
-    # Check which variables are USED (appear in printf, return, etc)
     used_vars = set()
     
     for i, line in enumerate(lines):
         for var_name in declared_vars.keys():
-            # Check if variable is used in printf
             if 'printf' in line and var_name in line:
                 used_vars.add(var_name)
-                print(f"Variable '{var_name}' USED in printf at line {i+1}")
-            # Check if variable is used in return
             elif 'return' in line and var_name in line:
                 used_vars.add(var_name)
-                print(f"Variable '{var_name}' USED in return at line {i+1}")
-            # Check if variable is used in any other way
             elif var_name in line and 'return' not in line and 'printf' not in line:
-                # Make sure it's not just being assigned
                 if not re.search(rf'^[^=]*{var_name}\s*=', line):
                     used_vars.add(var_name)
-                    print(f"Variable '{var_name}' USED in calculation at line {i+1}")
     
-    print(f"Used variables: {used_vars}")
-    
-    # Report unused variables
     for var_name, decl_line in declared_vars.items():
         if var_name not in used_vars:
-            print(f"REPORTING: {var_name} as UNUSED")
             issues.append({
                 'line': decl_line,
                 'type': 'unused_variable',
@@ -58,21 +38,37 @@ def analyze_code(code):
                 'severity': 'warning'
             })
     
-    # ===== CONSTANT FOLDING =====
+    # ===== CONSTANT FOLDING - Complex expressions =====
     for i, line in enumerate(lines, 1):
-        if re.search(r'=\s*\d+\s*[+\-*/]\s*\d+\s*;', line):
-            print(f"Constant folding found at line {i}")
+        # Match: 5 * 4 + 10 - 2, (2 * 3) + (4 * 5), (10 + 20) * 2
+        if re.search(r'=\s*\(\d+\s*[+\-*/]\s*\d+\).*?[;]', line) or re.search(r'=\s*\d+\s*[+\-*/]\s*\d+\s*[+\-*/]', line):
             issues.append({
                 'line': i,
                 'type': 'constant_folding',
-                'issue': 'Can fold constant expression (e.g., 2 + 3 → 5)',
+                'issue': 'Can fold constant expression',
                 'severity': 'info'
             })
     
-    # ===== REDUNDANT ASSIGNMENT =====
+    # ===== REDUNDANT ASSIGNMENT - Detect consecutive assignments =====
+    for i in range(len(lines) - 1):
+        line1 = lines[i].strip()
+        line2 = lines[i+1].strip()
+        
+        # Match: x = 5; followed by x = 5;
+        match1 = re.match(r'^(\w+)\s*=\s*(.+?)\s*[;]', line1)
+        match2 = re.match(r'^(\w+)\s*=\s*(.+?)\s*[;]', line2)
+        
+        if match1 and match2 and match1.group(1) == match2.group(1) and match1.group(2) == match2.group(2):
+            issues.append({
+                'line': i + 2,
+                'type': 'redundant',
+                'issue': f'Redundant assignment',
+                'severity': 'warning'
+            })
+    
+    # Also catch single line redundant: x = x;
     for i, line in enumerate(lines, 1):
-        if re.search(r'^\s*(\w+)\s*=\s*\1\s*;\s*$', line.strip()):
-            print(f"Redundant assignment found at line {i}")
+        if re.search(r'^\s*(\w+)\s*=\s*\1\s*[;]', line.strip()):
             issues.append({
                 'line': i,
                 'type': 'redundant',
@@ -80,43 +76,33 @@ def analyze_code(code):
                 'severity': 'warning'
             })
     
-    # ===== SIMPLE EXPRESSIONS =====
+    # ===== DEAD CODE - if(false), if(0) =====
     for i, line in enumerate(lines, 1):
-        if re.search(r'(\w+)\s*=\s*\1\s*\+\s*0\s*;', line):
-            print(f"Simple expression found at line {i}")
+        if re.search(r'if\s*\(\s*(false|0)\s*\)', line):
+            issues.append({
+                'line': i,
+                'type': 'dead_code',
+                'issue': 'Dead code block (if(false) or if(0))',
+                'severity': 'warning'
+            })
+    
+    # ===== EXPRESSION SIMPLIFICATION =====
+    for i, line in enumerate(lines, 1):
+        # x * 1
+        if re.search(r'(\w+)\s*\*\s*1\b', line) and '=' in line:
             issues.append({
                 'line': i,
                 'type': 'simplify',
-                'issue': 'Can simplify: x = x + 0 → x',
+                'issue': 'Can simplify: x * 1 → x',
                 'severity': 'info'
             })
-        if re.search(r'(\w+)\s*=\s*\1\s*\*\s*1\s*;', line):
-            print(f"Simple expression found at line {i}")
+        # x + 0
+        if re.search(r'(\w+)\s*\+\s*0\b', line) and '=' in line:
             issues.append({
                 'line': i,
                 'type': 'simplify',
-                'issue': 'Can simplify: x = x * 1 → x',
+                'issue': 'Can simplify: x + 0 → x',
                 'severity': 'info'
             })
-    
-    # ===== DEAD CODE =====
-    for i, line in enumerate(lines, 1):
-        if 'return' in line and not line.strip().startswith('//'):
-            for j in range(i, len(lines)):
-                next_line = lines[j].strip()
-                if next_line and next_line != '}' and not next_line.startswith('//'):
-                    print(f"Dead code found at line {j+1}")
-                    issues.append({
-                        'line': j + 1,
-                        'type': 'dead_code',
-                        'issue': 'Unreachable code after return',
-                        'severity': 'error'
-                    })
-                    break
-                if next_line == '}':
-                    break
-    
-    print(f"Total issues found: {len(issues)}")
-    print("="*60 + "\n")
     
     return issues

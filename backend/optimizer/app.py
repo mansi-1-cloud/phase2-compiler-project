@@ -5,7 +5,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from analyzer import analyze_code
 from optimizations import optimize
-from language_detector import detect_language
+from language_detector import detect_language, validate_language
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = BASE_DIR / 'frontend'
@@ -25,34 +25,28 @@ def health():
 @app.route('/analyze', methods=['POST'])
 def analyze():
     try:
-        print("\n" + "="*60)
-        print("RECEIVED REQUEST")
-        print("="*60)
-        
         data = request.json
-        print(f"Request data: {data}")
-        
         code = data.get('code', '')
         language = data.get('language', 'java')
         
-        print(f"Language from request: {language}")
-        print(f"Code length: {len(code)}")
-        print(f"Code preview: {code[:100]}")
-        
         if not code:
-            print("ERROR: No code provided")
             return jsonify({'success': False, 'error': 'No code provided'}), 400
         
+        # Validate language
+        validation = validate_language(code, language)
+        
+        if not validation['valid']:
+            return jsonify({
+                'success': False,
+                'error': validation['message'],
+                'detected_language': validation['detected']
+            }), 400
+        
         # Analyze
-        print(f"\nCalling analyze_code()...")
         issues = analyze_code(code)
-        print(f"Issues found: {len(issues)}")
-        print(f"Issues: {issues}")
         
         # Optimize
-        print(f"\nCalling optimize()...")
         optimized, stats = optimize(code)
-        print(f"Optimization stats: {stats}")
         
         # Calculate stats
         orig_lines = len([l for l in code.split('\n') if l.strip()])
@@ -62,6 +56,8 @@ def analyze():
         # different metric keys over time.
         response = {
             'success': True,
+            'language_validation': validation['message'],
+            'detected_language': validation['detected'],
             'issues': issues,
             'statistics': {
                 'original_lines': orig_lines,
@@ -78,9 +74,6 @@ def analyze():
                 'total_optimizations': sum(v for v in stats.values() if isinstance(v, (int, float)))
             }
         }
-        
-        print(f"\nResponse: {response}")
-        print("="*60 + "\n")
         
         return jsonify(response), 200
         
